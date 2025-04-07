@@ -1,0 +1,440 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudFormation template for API Gateway and Lambda function to
+  interact with Amazon Bedrock
+
+Globals:
+  Function:
+    Timeout: 3
+  Api:
+    EndpointConfiguration: REGIONAL
+    Cors:
+      AllowMethods: '''*'''
+      AllowHeaders: '''*'''
+      AllowOrigin: '''*'''
+Resources:
+
+  HealthcareDemosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  PromptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: healthcare-demo-prompts
+      AttributeDefinitions:
+      - AttributeName: demo
+        AttributeType: S
+      - AttributeName: title
+        AttributeType: S
+      KeySchema:
+      - AttributeName: demo
+        KeyType: HASH
+      - AttributeName: title
+        KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+  
+  ManagePromptsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ManagePromptsFunction
+      CodeUri: ./lambda/manage-prompts
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: healthcare-demo-prompts
+      Events:
+        ApiEventPost:
+          Type: Api
+          Properties:
+            Path: /manage-prompts
+            Method: post
+            RestApiId:
+              Ref: DemoAPIGateway
+        ApiEventGet:
+          Type: Api
+          Properties:
+            Path: /manage-prompts
+            Method: get
+            RestApiId:
+              Ref: DemoAPIGateway
+        OptionsEvent:
+          Type: Api
+          Properties:
+            Path: /manage-prompts
+            Method: options
+            RestApiId:
+              Ref: DemoAPIGateway
+
+  # DynamoDB table to store WebSocket connections
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: healthcare-demo-connections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # WebSocket API Gateway
+  WebSocketAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: BedrockStreamingWebSocketAPI
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  # WebSocket API Stage
+  WebSocketAPIStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      StageName: prod
+      AutoDeploy: true
+
+  # WebSocket Connection Lambda Function
+  WebSocketConnectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/websocket-connection
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE_NAME: !Ref ConnectionsTable
+          PROCESS_IMAGE_FUNCTION: !Ref BedrockImageProcessFunction
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BedrockImageProcessFunction
+
+  # Lambda function for sending messages via WebSocket
+  WebSocketSendMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/websocket-send-message
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - 'execute-api:ManageConnections'
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*'
+
+
+  GenerateTextResponseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/generate-text-response
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          WEBSOCKET_SEND_MESSAGE_FUNCTION: !GetAtt WebSocketSendMessageFunction.Arn
+          MODEL_ID: meta.llama3-8b-instruct-v1:0
+          EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:*
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt WebSocketSendMessageFunction.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}/*'
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}'
+            - Effect: Allow
+              Action:
+                - 'execute-api:ManageConnections'
+              Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*'
+
+
+  # Update the BedrockImageProcessFunction permissions and environment
+  BedrockImageProcessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/process-image-bedrock
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          WEBSOCKET_SEND_MESSAGE_FUNCTION: !GetAtt WebSocketSendMessageFunction.Arn
+          BUCKET_NAME: !Ref HealthcareDemosBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt WebSocketSendMessageFunction.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}/*'
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}'
+      Events:
+        ApiEventPost:
+          Type: Api
+          Properties:
+            Path: /process-image-bedrock
+            Method: post
+            RestApiId:
+              Ref: DemoAPIGateway
+
+  StartProcessPDFFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/start-process-pdf
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          BEDROCK_IMAGE_PROCESS_FUNCTION : !GetAtt BedrockImageProcessFunction.Arn
+          BUCKET_NAME: !Ref HealthcareDemosBucket
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt BedrockImageProcessFunction.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}/*'
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub 'arn:aws:s3:::${HealthcareDemosBucket}'
+      Events:
+        ApiEventPost:
+          Type: Api
+          Properties:
+            Path: /start-process-pdf
+            Method: post
+            RestApiId:
+              Ref: DemoAPIGateway
+
+  StartProcessTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/start-process-text
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+          GENERATE_TEXT_RESPONSE_FUNCTION : !GetAtt GenerateTextResponseFunction.Arn
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt GenerateTextResponseFunction.Arn
+      Events:
+        ApiEventPost:
+          Type: Api
+          Properties:
+            Path: /start-process-text
+            Method: post
+            RestApiId:
+              Ref: DemoAPIGateway
+
+
+  # WebSocket Connect Route
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: $connect
+      AuthorizationType: NONE
+      OperationName: ConnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref ConnectIntegration
+
+  # WebSocket Connect Integration
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketConnectionFunction.Arn}/invocations
+
+  # WebSocket Disconnect Route
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref DisconnectIntegration
+
+  # WebSocket Disconnect Integration
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketConnectionFunction.Arn}/invocations
+
+  # WebSocket Process Image Route
+  ProcessImageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      RouteKey: processImage
+      AuthorizationType: NONE
+      OperationName: ProcessImageRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref ProcessImageIntegration
+
+  # WebSocket Process Image Integration
+  ProcessImageIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketConnectionFunction.Arn}/invocations
+
+  # Lambda permission for WebSocket API to invoke WebSocketConnectionFunction (Connect)
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketConnectionFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/$connect
+
+  # Lambda permission for WebSocket API to invoke WebSocketConnectionFunction (Disconnect)
+  DisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketConnectionFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/$disconnect
+
+  # Lambda permission for WebSocket API to invoke WebSocketConnectionFunction (Process Image)
+  ProcessImagePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketConnectionFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketAPI}/*/processImage
+
+  # API Gateway
+  DemoAPIGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      BinaryMediaTypes:
+        - application/pdf
+      Cors:
+        AllowMethods: '''OPTIONS,POST,GET,PUT,DELETE'''
+        AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''*'''
+      MethodSettings:
+        - LoggingLevel: INFO
+          ResourcePath: /*
+          HttpMethod: '*'
+          DataTraceEnabled: true
+          MetricsEnabled: true
+
+Outputs:
+  BucketName:
+    Description: Name of the created S3 bucket
+    Value: !Ref HealthcareDemosBucket
+  BucketArn:
+    Description: ARN of the created S3 bucket
+    Value: !GetAtt HealthcareDemosBucket.Arn
+
+  RestApiEndpoint:
+    Description: REST API Gateway endpoint URL for Prod stage
+    Value: !Sub "https://${DemoAPIGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  
+  RestApiId:
+    Description: REST API Gateway ID
+    Value: !Ref DemoAPIGateway
+
+  WebSocketApiEndpoint:
+    Description: WebSocket API Gateway endpoint URL
+    Value: !Sub "wss://${WebSocketAPI}.execute-api.${AWS::Region}.amazonaws.com/${WebSocketAPIStage}"
+  
+  WebSocketApiId:
+    Description: WebSocket API Gateway ID
+    Value: !Ref WebSocketAPI
+
+  WebSocketApiStage:
+    Description: WebSocket API Gateway Stage name
+    Value: !Ref WebSocketAPIStage

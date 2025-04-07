@@ -1,0 +1,208 @@
+:root {
+  --sf-blue: #0070d2;
+  --sf-hover-blue: #005fb2;
+  --sf-light-blue: #e8f7ff;
+  --sf-text: #2b2826;
+  --sf-light-gray: #f3f3f3;
+  --sf-border: #d8dde6;
+  --sf-success: #04844b;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Salesforce Sans', Arial, sans-serif;
+  color: var(--sf-text);
+  line-height: 1.5;
+  background-color: #f9f9f9;
+}
+
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.app-header {
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--sf-border);
+  margin-bottom: 2rem;
+}
+
+.app-title {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--sf-blue);
+}
+
+.card {
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--sf-border);
+}
+
+.card-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.collapsible-panel {
+  border: 1px solid var(--sf-border);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.collapsible-header {
+  background-color: var(--sf-light-gray);
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.collapsible-header:hover {
+  background-color: #eaeaea;
+}
+
+.collapsible-content {
+  padding: 1rem;
+  background-color: white;
+  transition: max-height 0.3s ease-out;
+}
+
+.file-upload-area {
+  border: 2px dashed var(--sf-border);
+  border-radius: 4px;
+  background-color: var(--sf-light-gray);
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+}
+
+.file-upload-area:hover {
+  border-color: var(--sf-blue);
+  background-color: var(--sf-light-blue);
+}
+
+.file-upload-input {
+  display: none;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  background-color: var(--sf-light-blue);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.file-name {
+  flex-grow: 1;
+  margin-right: 1rem;
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  background-color: var(--sf-blue);
+  color: white;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn:hover {
+  background-color: var(--sf-hover-blue);
+}
+
+.btn-secondary {
+  background-color: white;
+  color: var(--sf-blue);
+  border: 1px solid var(--sf-blue);
+}
+
+.btn-secondary:hover {
+  background-color: var(--sf-light-blue);
+}
+
+.textarea-field {
+  width: 100%;
+  min-height: 120px;
+  padding: 0.75rem;
+  border: 1px solid var(--sf-border);
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.textarea-field:focus {
+  outline: none;
+  border-color: var(--sf-blue);
+  box-shadow: 0 0 0 1px var(--sf-blue);
+}
+
+.results-panel {
+  min-height: 200px;
+  padding: 1rem;
+  background-color: var(--sf-light-gray);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+
+.result-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top: 4px solid var(--sf-blue);
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.success-message {
+  color: var(--sf-success);
+  margin-bottom: 1rem;
+}
+
+.error-message {
+  color: #c23934;
+  margin-bottom: 1rem;
+}

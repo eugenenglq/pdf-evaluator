@@ -1,0 +1,7 @@
+boto3
+botocore
+faiss-cpu==1.7.4
+langchain==0.3.22
+langchain-community==0.3.20
+langchain-aws==0.2.18
+urllib3
