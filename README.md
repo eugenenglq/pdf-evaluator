@@ -56,35 +56,6 @@ npm start
 3. Select or enter an analysis prompt
 4. View real-time analysis results through the WebSocket connection
 
-### More Detailed Examples
-
-#### Document Analysis
-```javascript
-// Example of initiating document analysis
-const response = await fetch('/api/start-process-text', {
-  method: 'POST',
-  body: JSON.stringify({
-    connectionId: websocket.connectionId,
-    domainName: config.websocketDomain,
-    prompt: "Analyze the document's compliance with security standards",
-    bedrockKBID: "your-knowledge-base-id"
-  })
-});
-```
-
-#### Using WebSocket Connection
-```javascript
-const ws = new WebSocket('wss://your-api-gateway-url/prod');
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  if (!data.done) {
-    console.log('Received chunk:', data.chunk);
-  } else {
-    console.log('Analysis complete:', data.fullResponse);
-  }
-};
-```
-
 ## Data Flow
 The system processes documents through a multi-stage pipeline, from initial upload through analysis to real-time response streaming via WebSocket connections.
 

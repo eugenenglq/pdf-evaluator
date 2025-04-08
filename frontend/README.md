@@ -16,12 +16,12 @@ Deploy the stack using AWS CLI:
 ```bash
 # Deploy the stack
 aws cloudformation create-stack \
-  --stack-name your-frontend-stack \
+  --stack-name pdf-evaluator-stack \
   --template-body file://cfn_template.yaml
 
 # Wait for stack creation to complete
 aws cloudformation wait stack-create-complete \
-  --stack-name your-frontend-stack
+  --stack-name pdf-evaluator-stack
 ```
 
 ### 2. Get Deployment Information
@@ -30,7 +30,7 @@ Retrieve the S3 bucket name and CloudFront distribution ID:
 #### Get stack outputs
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name your-frontend-stack \
+  --stack-name pdf-evaluator-stack \
   --query 'Stacks[0].Outputs'
 ```
 
@@ -45,7 +45,7 @@ npm run build
 #### Upload built files to S3:
 
 ```bash
-aws s3 sync build/ s3://your-frontend-stack-frontend
+aws s3 sync build/ s3://pdf-evaluator-stack-frontend
 ```
 
 #### Create CloudFront invalidation to refresh content :
@@ -60,7 +60,7 @@ Your website will be available at the CloudFront domain name. You can get it usi
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name your-frontend-stack \
+  --stack-name pdf-evaluator-stack \
   --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDomainName`].OutputValue' \
   --output text
 ```
@@ -75,13 +75,13 @@ npm run build
 
 Upload new files:
 ```bash
-aws s3 sync build/ s3://YOUR-BUCKET-NAME
+aws s3 sync build/ s3://<REPLACE WITH YOUR BUCKET NAME, REFER TO STEP 2>
 ```
 
 Create CloudFront invalidation:
 ```bash
 aws cloudfront create-invalidation \
-  --distribution-id YOUR-DISTRIBUTION-ID \
+  --distribution-id <REPLACE WITH YOUR CLOUDFRONT DISTRIBUTION ID, REFER TO STEP 2> \
   --paths "/*"
 ```
 
@@ -91,7 +91,7 @@ When you need to modify the infrastructure, update the stack using:
 Create a change set to review changes
 ```bash
 aws cloudformation create-change-set \
-  --stack-name your-frontend-stack \
+  --stack-name pdf-evaluator-stack \
   --template-body file://cfn_template.yaml \
   --change-set-name change-set
 ```
@@ -99,21 +99,21 @@ aws cloudformation create-change-set \
 Review the proposed changes
 ```bash
 aws cloudformation describe-change-set \
-  --stack-name your-frontend-stack \
+  --stack-name pdf-evaluator-stack \
   --change-set-name change-set
 ```
 
 Execute the change set if changes look correct
 ```bash
 aws cloudformation execute-change-set \
-  --stack-name your-frontend-stack \
-  --change-set-name my-change-set
+  --stack-name pdf-evaluator-stack \
+  --change-set-name change-set
 ```
 
 Wait for stack update to complete
 ```bash
 aws cloudformation wait stack-update-complete \
-  --stack-name your-frontend-stack
+  --stack-name pdf-evaluator-stack
 ```
 
 ## Cleanup
@@ -121,5 +121,5 @@ To remove all resources:
 
 ```bash
 aws cloudformation delete-stack \
-  --stack-name your-frontend-stack
+  --stack-name pdf-evaluator-stack
 ```
