@@ -1,30 +1,125 @@
-# File Upload and Analysis Application
+# Frontend Deployment Guide
 
-This is a React.js application with a professional Salesforce-like UI that allows users to upload files, provide additional context via a collapsible textbox, and view results after processing.
+## Prerequisites
+- AWS CLI installed and configured with appropriate credentials
+- Node.js and npm installed (for building frontend assets)
 
-## Features
+## Infrastructure Deployment
 
-- **File Upload**: Drag and drop functionality or traditional file selection
-- **Collapsible Prompt Box**: Expandable/collapsible text area for additional instructions
-- **Results Display**: Clean display area for API responses
-- **Professional UI**: Salesforce-inspired design system
-- **Loading States**: Visual feedback during processing
+### 1. Deploy CloudFormation Stack
+The frontend infrastructure is defined in `cfn_template.yaml`. This template creates:
+- S3 bucket for hosting frontend files
+- CloudFront distribution for content delivery
+- Required security configurations and permissions
 
-## Getting Started
+Deploy the stack using AWS CLI:
+```bash
+# Deploy the stack
+aws cloudformation create-stack \
+  --stack-name your-frontend-stack \
+  --template-body file://cfn_template.yaml
 
-1. Simply open the `index.html` file in a web browser.
-2. The application uses CDN-hosted React, ReactDOM, and Babel for simplicity.
+# Wait for stack creation to complete
+aws cloudformation wait stack-create-complete \
+  --stack-name your-frontend-stack
+```
 
-## Integration with Backend
+### 2. Get Deployment Information
+Retrieve the S3 bucket name and CloudFront distribution ID:
 
-To connect this frontend to a real API:
+#### Get stack outputs
+```bash
+aws cloudformation describe-stacks \
+  --stack-name your-frontend-stack \
+  --query 'Stacks[0].Outputs'
+```
 
-1. Uncomment and modify the API call section in the `handleSubmit` function in `app.js`
-2. Update the API endpoint URL and adjust the request format as needed
-3. Process the API response accordingly
+### 3. Build and Deploy Frontend Files
+Build your frontend application:
 
-## Technologies Used
+```bash
+npm install
+npm run build
+```
 
-- React.js
-- CSS3 with custom variables
-- Drag and drop API
+#### Upload built files to S3:
+
+```bash
+aws s3 sync build/ s3://your-frontend-stack-frontend
+```
+
+#### Create CloudFront invalidation to refresh content :
+```bash
+aws cloudfront create-invalidation \
+  --distribution-id <REPLACE WITH YOUR CLOUDFRONT DISTRIBUTION ID, REFER TO STEP 2> \
+  --paths "/*"
+```
+
+### 4. Access Your Website
+Your website will be available at the CloudFront domain name. You can get it using:
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name your-frontend-stack \
+  --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDomainName`].OutputValue' \
+  --output text
+```
+
+## Updating the Website
+To update your website content:
+
+Build your changes:
+```bash
+npm run build
+```
+
+Upload new files:
+```bash
+aws s3 sync build/ s3://YOUR-BUCKET-NAME
+```
+
+Create CloudFront invalidation:
+```bash
+aws cloudfront create-invalidation \
+  --distribution-id YOUR-DISTRIBUTION-ID \
+  --paths "/*"
+```
+
+### Update CloudFormation Stack
+When you need to modify the infrastructure, update the stack using:
+
+Create a change set to review changes
+```bash
+aws cloudformation create-change-set \
+  --stack-name your-frontend-stack \
+  --template-body file://cfn_template.yaml \
+  --change-set-name change-set
+```
+
+Review the proposed changes
+```bash
+aws cloudformation describe-change-set \
+  --stack-name your-frontend-stack \
+  --change-set-name change-set
+```
+
+Execute the change set if changes look correct
+```bash
+aws cloudformation execute-change-set \
+  --stack-name your-frontend-stack \
+  --change-set-name my-change-set
+```
+
+Wait for stack update to complete
+```bash
+aws cloudformation wait stack-update-complete \
+  --stack-name your-frontend-stack
+```
+
+## Cleanup
+To remove all resources:
+
+```bash
+aws cloudformation delete-stack \
+  --stack-name your-frontend-stack
+```
