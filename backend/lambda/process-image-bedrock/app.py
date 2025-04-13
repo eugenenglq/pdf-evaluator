@@ -95,15 +95,15 @@ def lambda_handler(event, context):
         doc_message = {
             "role": "user",
             "content": [
-                {
-                    "document": {
-                        "name": "Document 1",
-                        "format": "pdf",
-                        "source": {
-                            "bytes": file_bytes
-                        }
-                    }
-                },
+                # {
+                #     "document": {
+                #         "name": "Document 1",
+                #         "format": "pdf",
+                #         "source": {
+                #             "bytes": file_bytes
+                #         }
+                #     }
+                # },
                 { "text": "Based on the document, " + prompt }
             ]
         }
@@ -129,7 +129,6 @@ def lambda_handler(event, context):
             
             # Process the streaming response chunks as they arrive
             if is_websocket:
-                print('started 3')
                 # For WebSocket requests, send each chunk as it arrives
                 full_response = ""
 
