@@ -45,14 +45,9 @@ def load_prompts():
     """Load prompts directly from DynamoDB"""
     try:
         dynamodb = initialize_dynamodb()
-        table = dynamodb.Table('healthcare-demo-prompts')
+        table = dynamodb.Table('tr-agent-prompts')
         
-        response = table.query(
-            KeyConditionExpression='demo = :demo',
-            ExpressionAttributeValues={
-                ':demo': 'pdf-analysis'
-            }
-        )
+        response = table.scan()
         
         prompts = response.get('Items', [])
         st.session_state.prompts = prompts
@@ -74,10 +69,9 @@ def save_prompt(title, prompt_text, is_update=False):
                 return False
 
         dynamodb = initialize_dynamodb()
-        table = dynamodb.Table('healthcare-demo-prompts')
+        table = dynamodb.Table('tr-agent-prompts')
         
         item = {
-            'demo': 'pdf-analysis',
             'title': title,
             'prompt': prompt_text
         }
